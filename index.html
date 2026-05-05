@@ -27,12 +27,12 @@ const { useState, useEffect, useCallback, useRef } = React;
 // ════════════════════════════════════════════════
 // ⚙️  CONFIGURATIE — Vul jouw Supabase gegevens in
 // ════════════════════════════════════════════════
-const SUPABASE_URL = "JOUW_SUPABASE_URL";   // bijv. https://abcxyz.supabase.co
-const SUPABASE_KEY = "JOUW_SUPABASE_KEY";   // anon/public key uit Supabase dashboard
+const SUPABASE_URL = "qwrympzutcyvlrcrbrxu";   // bijv. https://abcxyz.supabase.co
+const SUPABASE_KEY = "sb_publishable_ejD5rfbrSyrZALjqngnC3g_TJo4DDci";   // anon/public key uit Supabase dashboard
 // ════════════════════════════════════════════════
 
 // Storage — Supabase als geconfigureerd, anders localStorage
-const IS_LIVE = SUPABASE_URL !== "JOUW_SUPABASE_URL";
+const IS_LIVE = SUPABASE_URL !== "qwrympzutcyvlrcrbrxu";
 const sb = IS_LIVE ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 async function sget(key) {
