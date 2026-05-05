@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="nl">
 <head>
   <meta charset="UTF-8"/>
@@ -17,8 +18,11 @@
 <div id="root"></div>
 
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
 <script type="text/babel" data-presets="react">
@@ -27,12 +31,12 @@ const { useState, useEffect, useCallback, useRef } = React;
 // ════════════════════════════════════════════════
 // ⚙️  CONFIGURATIE — Vul jouw Supabase gegevens in
 // ════════════════════════════════════════════════
-const SUPABASE_URL = "https://qwrympzutcyvlrcrbrxu.supabase.co";
-const SUPABASE_KEY = "sb_publishable_ejD5rfbrSyrZALjqngnC3g_TJo4DDci";   // anon/public key uit Supabase dashboard
+const SUPABASE_URL = "JOUW_SUPABASE_URL";   // bijv. https://abcxyz.supabase.co
+const SUPABASE_KEY = "JOUW_SUPABASE_KEY";   // anon/public key uit Supabase dashboard
 // ════════════════════════════════════════════════
 
 // Storage — Supabase als geconfigureerd, anders localStorage
-const IS_LIVE = SUPABASE_URL !== "qwrympzutcyvlrcrbrxu";
+const IS_LIVE = SUPABASE_URL !== "JOUW_SUPABASE_URL";
 const sb = IS_LIVE ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 async function sget(key) {
@@ -55,12 +59,24 @@ async function sset(key, val) {
   }
 }
 
+// ── Admin config — verander dit naar jouw eigen geheime code ──
+const ADMIN_CODE = "LIFTLOG-ADMIN";  // ← verander dit!
+const ANNOUNCE_KEY = "ll-announcement";
+
 // ── Storage keys ──
 const USERS_KEY     = "ll-users";
 const LAST_USER_KEY = "ll-lastuser";  // always local
 const logsKey    = n => `ll-logs-${n}`;
 const splitKey   = n => `ll-split-${n}`;
 const weightKey  = n => `ll-weight-${n}`;
+
+async function sdelete(key) {
+  if (sb) {
+    try { await sb.from('liftlog').delete().eq('key', key); } catch {}
+  } else {
+    try { localStorage.removeItem(key); } catch {}
+  }
+}
 
 // ── Default split ──
 const DEFAULT_SPLIT = [
@@ -548,6 +564,112 @@ function SplitEditor({ split, onChange }) {
   );
 }
 
+
+// ═══════════════════════════════════════
+// ADMIN PANEL
+// ═══════════════════════════════════════
+function AdminPanel({ users, onDelete, onResetData, onResetPin, onAnnounce, onClearAnnounce, announcement, onBack }) {
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [confirmReset, setConfirmReset]   = useState(null);
+  const [annText, setAnnText]             = useState(announcement?.text || "");
+  const [tab, setTab]                     = useState("users"); // users | announce
+
+  return (
+    <div className="app">
+      <div className="header">
+        <button className="header-back" onClick={onBack}>←</button>
+        <div className="hlogo">Lift<span style={{color:"#FF6B35"}}>Log</span> <span style={{fontSize:12,color:"#FF6B35",letterSpacing:1}}>ADMIN</span></div>
+      </div>
+      <div className="nav">
+        <button className={`nb${tab==="users"?" on":""}`} onClick={()=>setTab("users")}>👥 Gebruikers</button>
+        <button className={`nb${tab==="announce"?" on":""}`} onClick={()=>setTab("announce")}>📢 Aankondiging</button>
+      </div>
+
+      {tab==="users" && (
+        <div className="content">
+          <div className="sec">{users.length} gebruikers</div>
+          {users.map(u=>(
+            <div key={u.name} className="card" style={{borderLeft:`3px solid ${u.color}`,marginBottom:12}}>
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+                <Avatar user={u} size={40}/>
+                <div style={{flex:1}}>
+                  <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:18,textTransform:"uppercase",color:u.color}}>{u.name}</div>
+                  <div style={{fontSize:11,color:"#555"}}>{u.pin?"🔒 Heeft pincode":"Geen pincode"}</div>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {u.pin && (
+                  <button onClick={()=>onResetPin(u.name)}
+                    style={{background:"#1a1a1a",border:"1px solid #333",borderRadius:7,color:"#FFD60A",padding:"7px 12px",cursor:"pointer",fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,letterSpacing:1,textTransform:"uppercase"}}>
+                    🔓 Pin resetten
+                  </button>
+                )}
+                {confirmReset===u.name ? (
+                  <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                    <span style={{fontSize:12,color:"#ff4444"}}>Zeker weten?</span>
+                    <button onClick={()=>{onResetData(u.name);setConfirmReset(null);}}
+                      style={{background:"#ff4444",border:"none",borderRadius:7,color:"white",padding:"7px 12px",cursor:"pointer",fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,letterSpacing:1,textTransform:"uppercase"}}>Ja</button>
+                    <button onClick={()=>setConfirmReset(null)}
+                      style={{background:"#1a1a1a",border:"1px solid #333",borderRadius:7,color:"#888",padding:"7px 12px",cursor:"pointer",fontFamily:"'Barlow Condensed',sans-serif",fontSize:12}}>Nee</button>
+                  </div>
+                ) : (
+                  <button onClick={()=>setConfirmReset(u.name)}
+                    style={{background:"#1a1a1a",border:"1px solid #333",borderRadius:7,color:"#FF6B35",padding:"7px 12px",cursor:"pointer",fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,letterSpacing:1,textTransform:"uppercase"}}>
+                    🗑 Data resetten
+                  </button>
+                )}
+                {confirmDelete===u.name ? (
+                  <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                    <span style={{fontSize:12,color:"#ff4444"}}>Verwijderen?</span>
+                    <button onClick={()=>{onDelete(u.name);setConfirmDelete(null);}}
+                      style={{background:"#ff4444",border:"none",borderRadius:7,color:"white",padding:"7px 12px",cursor:"pointer",fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,letterSpacing:1,textTransform:"uppercase"}}>Ja</button>
+                    <button onClick={()=>setConfirmDelete(null)}
+                      style={{background:"#1a1a1a",border:"1px solid #333",borderRadius:7,color:"#888",padding:"7px 12px",cursor:"pointer",fontFamily:"'Barlow Condensed',sans-serif",fontSize:12}}>Nee</button>
+                  </div>
+                ) : (
+                  <button onClick={()=>setConfirmDelete(u.name)}
+                    style={{background:"#1a1a1a",border:"1px solid #ff444433",borderRadius:7,color:"#ff4444",padding:"7px 12px",cursor:"pointer",fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,letterSpacing:1,textTransform:"uppercase"}}>
+                    ✕ Verwijderen
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab==="announce" && (
+        <div className="content">
+          <div className="sec">Aankondiging sturen</div>
+          <div className="card" style={{marginBottom:16}}>
+            <div style={{fontSize:12,color:"#555",marginBottom:12}}>Dit zien alle gebruikers bovenaan hun dashboard.</div>
+            <textarea value={annText} onChange={e=>setAnnText(e.target.value)}
+              placeholder="Bijv: Let op! Nieuwe oefeningen toegevoegd aan Upper B..."
+              style={{background:"#1a1a1a",border:"1px solid #252525",borderRadius:8,padding:12,color:"#f0f0f0",fontFamily:"'Barlow',sans-serif",fontSize:14,width:"100%",outline:"none",minHeight:100,resize:"vertical",marginBottom:12}}/>
+            <button className="btn-primary" onClick={()=>onAnnounce(annText)} disabled={!annText.trim()}>
+              📢 Versturen
+            </button>
+            {announcement && (
+              <button className="btn-ghost" onClick={onClearAnnounce}>
+                Aankondiging verwijderen
+              </button>
+            )}
+          </div>
+          {announcement && (
+            <>
+              <div className="sec">Huidige aankondiging</div>
+              <div style={{background:"#111",border:"1px solid #FF6B3533",borderRadius:12,padding:14}}>
+                <div style={{fontSize:13,color:"#f0f0f0",marginBottom:6}}>{announcement.text}</div>
+                <div style={{fontSize:11,color:"#555"}}>{new Date(announcement.date).toLocaleDateString("nl-NL",{weekday:"long",day:"numeric",month:"long"})}</div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════
 // BATTLE VIEW
 // ═══════════════════════════════════════
@@ -701,6 +823,11 @@ function App() {
   const [inputValues, setInputValues] = useState({});
   const [prevData, setPrevData]       = useState({});
   const [pinTarget, setPinTarget]     = useState(null);
+  const [isAdmin, setIsAdmin]           = useState(false);
+  const [adminUsers, setAdminUsers]     = useState([]);
+  const [announcement, setAnnouncement] = useState(null);
+  const [adminCode, setAdminCode]       = useState("");
+  const [adminCodeError, setAdminCodeError] = useState(false);
   // Create form state
   const [newName, setNewName]   = useState("");
   const [newColor, setNewColor] = useState(COLORS[0]);
@@ -719,6 +846,11 @@ function App() {
       else { setScreen("users"); }
     }
     init();
+  },[]);
+
+  // Load announcement
+  useEffect(()=>{
+    sget(ANNOUNCE_KEY).then(a=>{ if(a) setAnnouncement(a); });
   },[]);
 
   async function loadUser(user) {
@@ -755,6 +887,47 @@ function App() {
   async function handlePhotoSelect(e) {
     const file = e.target.files?.[0];
     if (file) { const b64 = await resizeImage(file, 200); setNewPhoto(b64); }
+  }
+
+  async function loadAdminData() {
+    const users = await sget(USERS_KEY) || [];
+    setAdminUsers(users);
+  }
+
+  async function adminDeleteUser(name) {
+    const updated = allUsers.filter(u => u.name !== name);
+    await sset(USERS_KEY, updated);
+    await sdelete(logsKey(name));
+    await sdelete(splitKey(name));
+    await sdelete(weightKey(name));
+    setAllUsers(updated);
+    setAdminUsers(updated);
+  }
+
+  async function adminResetData(name) {
+    await sdelete(logsKey(name));
+    await sdelete(splitKey(name));
+    await sdelete(weightKey(name));
+    await sset(splitKey(name), DEFAULT_SPLIT);
+    loadAdminData();
+  }
+
+  async function adminResetPin(name) {
+    const updated = allUsers.map(u => u.name === name ? {...u, pin: null} : u);
+    await sset(USERS_KEY, updated);
+    setAllUsers(updated);
+    setAdminUsers(updated);
+  }
+
+  async function adminSendAnnouncement(text) {
+    const ann = { text, date: new Date().toISOString() };
+    await sset(ANNOUNCE_KEY, ann);
+    setAnnouncement(ann);
+  }
+
+  async function adminClearAnnouncement() {
+    await sdelete(ANNOUNCE_KEY);
+    setAnnouncement(null);
   }
 
   function startSession(session) {
@@ -825,252 +998,314 @@ function App() {
   if (screen==="loading") return (
     <>
       <style>{CSS}</style>
-      <div className="app"><div className="center"><div className="logo">Lift<span>Log</span></div><div className="sub">Laden...</div></div></div>
-    </>
-  );
 
-  if (screen==="users") return (
-    <>
-      <style>{CSS}</style>
-      <div className="app">
-        <div style={{padding:"32px 20px 20px"}}>
-          <div className="logo" style={{marginBottom:4}}>Lift<span>Log</span></div>
-          <div className="sub">Wie ben jij?</div>
-          {!IS_LIVE && <div style={{background:"#1a1200",border:"1px solid #332200",borderRadius:8,padding:"10px 14px",marginTop:12,fontSize:12,color:"#886622"}}>⚠️ Supabase niet geconfigureerd — data wordt lokaal opgeslagen (alleen op dit apparaat)</div>}
-        </div>
-        <div style={{padding:"0 20px 20px"}}>
-          {allUsers.length>0 && <div className="sec" style={{marginBottom:10}}>Profielen</div>}
-          {allUsers.map(u=>(
-            <div className="user-card" key={u.name} onClick={()=>{ if(u.pin){setPinTarget(u);setScreen("pin");}else{loadUser(u);} }}>
-              <Avatar user={u} size={44}/>
-              <div style={{flex:1}}>
-                <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:20,textTransform:"uppercase",letterSpacing:1,color:u.color}}>{u.name}</div>
-                <div style={{fontSize:12,color:"#555",marginTop:2}}>{u.pin?"🔒 Beveiligd":"Tik om in te loggen"}</div>
-              </div>
-              <div style={{color:"#333",fontSize:18}}>›</div>
+```
+  <div className="app"><div className="center"><div className="logo">Lift<span>Log</span></div><div className="sub">Laden...</div></div></div>
+</>
+```
+
+);
+
+if (screen===“users”) return (
+<>
+<style>{CSS}</style>
+<div className="app">
+<div style={{padding:“32px 20px 20px”}}>
+<div className="logo" style={{marginBottom:4}}>Lift<span>Log</span></div>
+<div className="sub">Wie ben jij?</div>
+{!IS_LIVE && <div style={{background:”#1a1200”,border:“1px solid #332200”,borderRadius:8,padding:“10px 14px”,marginTop:12,fontSize:12,color:”#886622”}}>⚠️ Supabase niet geconfigureerd — data wordt lokaal opgeslagen (alleen op dit apparaat)</div>}
+</div>
+<div style={{padding:“0 20px 20px”}}>
+{allUsers.length>0 && <div className="sec" style={{marginBottom:10}}>Profielen</div>}
+{allUsers.map(u=>(
+<div className=“user-card” key={u.name} onClick={()=>{ if(u.pin){setPinTarget(u);setScreen(“pin”);}else{loadUser(u);} }}>
+<Avatar user={u} size={44}/>
+<div style={{flex:1}}>
+<div style={{fontFamily:”‘Barlow Condensed’,sans-serif”,fontWeight:900,fontSize:20,textTransform:“uppercase”,letterSpacing:1,color:u.color}}>{u.name}</div>
+<div style={{fontSize:12,color:”#555”,marginTop:2}}>{u.pin?“🔒 Beveiligd”:“Tik om in te loggen”}</div>
+</div>
+<div style={{color:”#333”,fontSize:18}}>›</div>
+</div>
+))}
+<button className=“btn-new” onClick={()=>setScreen(“create”)}>+ Nieuw profiel</button>
+<button onClick={()=>setScreen(“admin-login”)}
+style={{width:“100%”,background:“none”,border:“none”,color:”#2a2a2a”,padding:“12px”,cursor:“pointer”,fontFamily:”‘Barlow Condensed’,sans-serif”,fontSize:12,letterSpacing:1,textTransform:“uppercase”,marginTop:4}}>
+⚙️ Admin
+</button>
+</div>
+</div>
+</>
+);
+
+if (screen===“admin-login”) return (
+<>
+<style>{CSS}</style>
+<div className="app">
+<div className="header">
+<button className=“header-back” onClick={()=>{setAdminCode(””);setAdminCodeError(false);setScreen(“users”);}}>←</button>
+<div className="hlogo">Lift<span>Log</span></div>
+</div>
+<div style={{padding:“40px 20px”,textAlign:“center”}}>
+<div style={{fontSize:40,marginBottom:16}}>🔐</div>
+<div style={{fontFamily:”‘Barlow Condensed’,sans-serif”,fontWeight:900,fontSize:24,textTransform:“uppercase”,letterSpacing:1,marginBottom:4}}>Admin Toegang</div>
+<div style={{fontSize:13,color:”#555”,marginBottom:32}}>Voer de admin code in</div>
+<input className=“txt-in” type=“password” value={adminCode}
+onChange={e=>{ setAdminCode(e.target.value); setAdminCodeError(false); }}
+placeholder=“Admin code” style={{textAlign:“center”,letterSpacing:4,fontSize:18,marginBottom:12}}/>
+{adminCodeError && <div style={{color:”#ff4444”,fontFamily:”‘Barlow Condensed’,sans-serif”,fontSize:13,letterSpacing:1,textTransform:“uppercase”,marginBottom:12}}>✕ Verkeerde code</div>}
+<button className=“btn-primary” style={{marginTop:8}} onClick={()=>{
+if(adminCode===ADMIN_CODE){ setIsAdmin(true); loadAdminData(); setAdminCode(””); setScreen(“admin”); }
+else { setAdminCodeError(true); }
+}}>Inloggen →</button>
+<button className=“btn-ghost” onClick={()=>{setAdminCode(””);setAdminCodeError(false);setScreen(“users”);}}>Terug</button>
+</div>
+</div>
+</>
+);
+
+if (screen===“admin”) return (
+<>
+<style>{CSS}</style>
+<AdminPanel
+users={adminUsers}
+announcement={announcement}
+onDelete={adminDeleteUser}
+onResetData={adminResetData}
+onResetPin={adminResetPin}
+onAnnounce={adminSendAnnouncement}
+onClearAnnounce={adminClearAnnouncement}
+onBack={()=>setScreen(“users”)}
+/>
+</>
+);
+
+if (screen===“pin”) return (
+<>
+<style>{CSS}</style>
+<div className="app">
+<div className="header">
+<button className=“header-back” onClick={()=>{setPinTarget(null);setScreen(“users”);}}>←</button>
+<div className="hlogo">Lift<span>Log</span></div>
+</div>
+<PinScreen user={pinTarget} onSuccess={()=>loadUser(pinTarget)} onBack={()=>{setPinTarget(null);setScreen(“users”);}}/>
+</div>
+</>
+);
+
+if (screen===“create”) return (
+<>
+<style>{CSS}</style>
+<div className="app">
+<div className="header">
+<button className=“header-back” onClick={()=>setScreen(“users”)}>←</button>
+<div className="hlogo">Lift<span>Log</span></div>
+</div>
+<div className="content">
+<div className="sec" style={{marginBottom:16}}>Nieuw Profiel</div>
+<div className="card" style={{marginBottom:16}}>
+{/* Foto */}
+<div className="field-label">Profielfoto (optioneel)</div>
+<div style={{display:“flex”,alignItems:“center”,gap:14,marginBottom:16}}>
+{newPhoto
+? <img src={newPhoto} alt=“preview” style={{width:64,height:64,borderRadius:“50%”,objectFit:“cover”,border:`2px solid ${newColor}`}}/>
+: <div style={{width:64,height:64,borderRadius:“50%”,background:newColor+“22”,border:`2px solid ${newColor}`,display:“flex”,alignItems:“center”,justifyContent:“center”,fontFamily:”‘Barlow Condensed’,sans-serif”,fontWeight:900,fontSize:24,color:newColor,flexShrink:0}}>
+{newName.trim().slice(0,2).toUpperCase()||”?”}
+</div>
+}
+<div>
+<button onClick={()=>photoInputRef.current?.click()}
+style={{background:”#1a1a1a”,border:“1px solid #252525”,borderRadius:8,color:”#888”,padding:“8px 14px”,cursor:“pointer”,fontFamily:”‘Barlow Condensed’,sans-serif”,fontSize:13,letterSpacing:1,textTransform:“uppercase”,display:“block”,marginBottom:6}}>
+📷 {newPhoto?“Foto wijzigen”:“Foto uploaden”}
+</button>
+{newPhoto && <button onClick={()=>setNewPhoto(null)} style={{background:“none”,border:“none”,color:”#555”,cursor:“pointer”,fontSize:12}}>Verwijderen</button>}
+</div>
+<input ref={photoInputRef} type=“file” accept=“image/*” style={{display:“none”}} onChange={handlePhotoSelect}/>
+</div>
+{/* Naam */}
+<div className="field-label">Naam</div>
+<input className=“txt-in” value={newName} onChange={e=>setNewName(e.target.value)} placeholder=“Jouw naam” style={{marginBottom:16}}/>
+{/* Kleur */}
+<div className="field-label">Kleur</div>
+<div className="color-row" style={{marginBottom:16}}>
+{COLORS.map(c=><div key={c} className={`cdot${newColor===c?" on":""}`} style={{background:c}} onClick={()=>setNewColor(c)}/>)}
+</div>
+{/* Pin */}
+<div className="field-label">Pincode — 4 cijfers (optioneel)</div>
+<input className=“txt-in” type=“password” inputMode=“numeric” maxLength={4} value={newPin}
+onChange={e=>setNewPin(e.target.value.replace(/\D/g,””).slice(0,4))} placeholder=“Bijv. 1234”
+style={{letterSpacing:8,fontSize:20,textAlign:“center”}}/>
+<div style={{fontSize:11,color:”#444”,marginTop:6}}>Laat leeg voor geen pincode</div>
+</div>
+<button className="btn-primary" onClick={createUser} disabled={!newName.trim()}>Profiel Aanmaken →</button>
+<button className=“btn-ghost” onClick={()=>setScreen(“users”)}>Terug</button>
+</div>
+</div>
+</>
+);
+
+if (screen===“split-editor”) return (
+<>
+<style>{CSS}</style>
+<div className="app">
+<div className="header">
+<button className=“header-back” onClick={()=>setScreen(“dashboard”)}>←</button>
+<div className="hlogo">Lift<span>Log</span></div>
+<button onClick={()=>saveSplit(userSplit)} style={{background:”#FF6B35”,border:“none”,borderRadius:8,color:“white”,padding:“8px 14px”,cursor:“pointer”,fontFamily:”‘Barlow Condensed’,sans-serif”,fontWeight:700,fontSize:13,letterSpacing:1,textTransform:“uppercase”}}>Opslaan</button>
+</div>
+<SplitEditor split={userSplit} onChange={setUserSplit}/>
+</div>
+</>
+);
+
+if (screen===“log”) return (
+<>
+<style>{CSS}</style>
+<div className="app">
+<div className="header">
+<button className=“header-back” onClick={()=>setScreen(“dashboard”)}>←</button>
+<div className="hlogo">Lift<span>Log</span></div>
+<Avatar user={currentUser} size={32}/>
+</div>
+<LogView session={activeSession} currentSets={currentSets} inputValues={inputValues} prevData={prevData}
+onInputChange={onInputChange} onAddSet={onAddSet} onRemoveSet={onRemoveSet} onSave={saveSession}/>
+</div>
+</>
+);
+
+if (screen===“saved”) return (
+<>
+<style>{CSS}</style>
+<div className="app">
+<div style={{display:“flex”,flexDirection:“column”,alignItems:“center”,justifyContent:“center”,padding:“60px 20px”,textAlign:“center”}}>
+<div style={{fontSize:60,marginBottom:16}}>✅</div>
+<div style={{fontFamily:”‘Barlow Condensed’,sans-serif”,fontWeight:900,fontSize:32,textTransform:“uppercase”,letterSpacing:2,marginBottom:6}}>Opgeslagen!</div>
+<div style={{color:”#555”,marginBottom:8}}>{activeSession?.name} · {new Date().toLocaleDateString(“nl-NL”,{day:“numeric”,month:“short”})}</div>
+<div style={{fontSize:12,color:”#333”,marginBottom:28}}>📦 Permanent bewaard</div>
+<button className=“btn-ghost” style={{width:“auto”,padding:“12px 24px”}} onClick={()=>setScreen(“dashboard”)}>← Terug naar Home</button>
+</div>
+</div>
+</>
+);
+
+// ── Main dashboard ──
+return (
+<>
+<style>{CSS}</style>
+<div className="app">
+<div className="header">
+<div className="hlogo">Lift<span>Log</span></div>
+<div style={{display:“flex”,alignItems:“center”,gap:8}}>
+<button className=“switch-btn” onClick={()=>setScreen(“users”)}>← Wissel</button>
+<Avatar user={currentUser} size={34}/>
+</div>
+</div>
+<div className="nav">
+{[[“dashboard”,“Home”],[“history”,“Historie”],[“progress”,“Progressie”],[“weight”,“⚖️ Gewicht”],[“battle”,“⚔️ Battle”]].map(([s,l])=>(
+<button key={s} className={`nb${screen===s?" on":""}`} onClick={()=>setScreen(s)}>{l}</button>
+))}
+</div>
+
+```
+    {/* HOME */}
+    {screen==="dashboard" && (
+      <div className="content">
+        <div style={{display:"flex",gap:8,marginBottom:20}}>
+          {[{v:wSessions,l:"Sessies"},{v:wVolume>0?wVolume.toLocaleString()+"kg":"—",l:"Week vol."},{v:streak+"d",l:"Streak"}].map(s=>(
+            <div key={s.l} className="card" style={{flex:1,textAlign:"center",padding:"12px 8px"}}>
+              <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:22,color:currentUser.color}}>{s.v}</div>
+              <div style={{fontSize:10,color:"#444",fontFamily:"'Barlow Condensed',sans-serif",letterSpacing:1,textTransform:"uppercase"}}>{s.l}</div>
             </div>
           ))}
-          <button className="btn-new" onClick={()=>setScreen("create")}>+ Nieuw profiel</button>
         </div>
-      </div>
-    </>
-  );
-
-  if (screen==="pin") return (
-    <>
-      <style>{CSS}</style>
-      <div className="app">
-        <div className="header">
-          <button className="header-back" onClick={()=>{setPinTarget(null);setScreen("users");}}>←</button>
-          <div className="hlogo">Lift<span>Log</span></div>
-        </div>
-        <PinScreen user={pinTarget} onSuccess={()=>loadUser(pinTarget)} onBack={()=>{setPinTarget(null);setScreen("users");}}/>
-      </div>
-    </>
-  );
-
-  if (screen==="create") return (
-    <>
-      <style>{CSS}</style>
-      <div className="app">
-        <div className="header">
-          <button className="header-back" onClick={()=>setScreen("users")}>←</button>
-          <div className="hlogo">Lift<span>Log</span></div>
-        </div>
-        <div className="content">
-          <div className="sec" style={{marginBottom:16}}>Nieuw Profiel</div>
-          <div className="card" style={{marginBottom:16}}>
-            {/* Foto */}
-            <div className="field-label">Profielfoto (optioneel)</div>
-            <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:16}}>
-              {newPhoto
-                ? <img src={newPhoto} alt="preview" style={{width:64,height:64,borderRadius:"50%",objectFit:"cover",border:`2px solid ${newColor}`}}/>
-                : <div style={{width:64,height:64,borderRadius:"50%",background:newColor+"22",border:`2px solid ${newColor}`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:24,color:newColor,flexShrink:0}}>
-                    {newName.trim().slice(0,2).toUpperCase()||"?"}
-                  </div>
-              }
-              <div>
-                <button onClick={()=>photoInputRef.current?.click()}
-                  style={{background:"#1a1a1a",border:"1px solid #252525",borderRadius:8,color:"#888",padding:"8px 14px",cursor:"pointer",fontFamily:"'Barlow Condensed',sans-serif",fontSize:13,letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>
-                  📷 {newPhoto?"Foto wijzigen":"Foto uploaden"}
-                </button>
-                {newPhoto && <button onClick={()=>setNewPhoto(null)} style={{background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:12}}>Verwijderen</button>}
-              </div>
-              <input ref={photoInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={handlePhotoSelect}/>
+        {announcement && (
+          <div style={{background:"#1a1200",border:"1px solid #FF6B3544",borderRadius:12,padding:"14px 16px",marginBottom:16,display:"flex",alignItems:"flex-start",gap:12}}>
+            <div style={{fontSize:20,flexShrink:0}}>📢</div>
+            <div style={{flex:1}}>
+              <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:13,textTransform:"uppercase",letterSpacing:.5,color:"#FF6B35",marginBottom:4}}>Aankondiging</div>
+              <div style={{fontSize:13,color:"#ccc"}}>{announcement.text}</div>
             </div>
-            {/* Naam */}
-            <div className="field-label">Naam</div>
-            <input className="txt-in" value={newName} onChange={e=>setNewName(e.target.value)} placeholder="Jouw naam" style={{marginBottom:16}}/>
-            {/* Kleur */}
-            <div className="field-label">Kleur</div>
-            <div className="color-row" style={{marginBottom:16}}>
-              {COLORS.map(c=><div key={c} className={`cdot${newColor===c?" on":""}`} style={{background:c}} onClick={()=>setNewColor(c)}/>)}
-            </div>
-            {/* Pin */}
-            <div className="field-label">Pincode — 4 cijfers (optioneel)</div>
-            <input className="txt-in" type="password" inputMode="numeric" maxLength={4} value={newPin}
-              onChange={e=>setNewPin(e.target.value.replace(/\D/g,"").slice(0,4))} placeholder="Bijv. 1234"
-              style={{letterSpacing:8,fontSize:20,textAlign:"center"}}/>
-            <div style={{fontSize:11,color:"#444",marginTop:6}}>Laat leeg voor geen pincode</div>
-          </div>
-          <button className="btn-primary" onClick={createUser} disabled={!newName.trim()}>Profiel Aanmaken →</button>
-          <button className="btn-ghost" onClick={()=>setScreen("users")}>Terug</button>
-        </div>
-      </div>
-    </>
-  );
-
-  if (screen==="split-editor") return (
-    <>
-      <style>{CSS}</style>
-      <div className="app">
-        <div className="header">
-          <button className="header-back" onClick={()=>setScreen("dashboard")}>←</button>
-          <div className="hlogo">Lift<span>Log</span></div>
-          <button onClick={()=>saveSplit(userSplit)} style={{background:"#FF6B35",border:"none",borderRadius:8,color:"white",padding:"8px 14px",cursor:"pointer",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:13,letterSpacing:1,textTransform:"uppercase"}}>Opslaan</button>
-        </div>
-        <SplitEditor split={userSplit} onChange={setUserSplit}/>
-      </div>
-    </>
-  );
-
-  if (screen==="log") return (
-    <>
-      <style>{CSS}</style>
-      <div className="app">
-        <div className="header">
-          <button className="header-back" onClick={()=>setScreen("dashboard")}>←</button>
-          <div className="hlogo">Lift<span>Log</span></div>
-          <Avatar user={currentUser} size={32}/>
-        </div>
-        <LogView session={activeSession} currentSets={currentSets} inputValues={inputValues} prevData={prevData}
-          onInputChange={onInputChange} onAddSet={onAddSet} onRemoveSet={onRemoveSet} onSave={saveSession}/>
-      </div>
-    </>
-  );
-
-  if (screen==="saved") return (
-    <>
-      <style>{CSS}</style>
-      <div className="app">
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"60px 20px",textAlign:"center"}}>
-          <div style={{fontSize:60,marginBottom:16}}>✅</div>
-          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:32,textTransform:"uppercase",letterSpacing:2,marginBottom:6}}>Opgeslagen!</div>
-          <div style={{color:"#555",marginBottom:8}}>{activeSession?.name} · {new Date().toLocaleDateString("nl-NL",{day:"numeric",month:"short"})}</div>
-          <div style={{fontSize:12,color:"#333",marginBottom:28}}>📦 Permanent bewaard</div>
-          <button className="btn-ghost" style={{width:"auto",padding:"12px 24px"}} onClick={()=>setScreen("dashboard")}>← Terug naar Home</button>
-        </div>
-      </div>
-    </>
-  );
-
-  // ── Main dashboard ──
-  return (
-    <>
-      <style>{CSS}</style>
-      <div className="app">
-        <div className="header">
-          <div className="hlogo">Lift<span>Log</span></div>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <button className="switch-btn" onClick={()=>setScreen("users")}>← Wissel</button>
-            <Avatar user={currentUser} size={34}/>
-          </div>
-        </div>
-        <div className="nav">
-          {[["dashboard","Home"],["history","Historie"],["progress","Progressie"],["weight","⚖️ Gewicht"],["battle","⚔️ Battle"]].map(([s,l])=>(
-            <button key={s} className={`nb${screen===s?" on":""}`} onClick={()=>setScreen(s)}>{l}</button>
-          ))}
-        </div>
-
-        {/* HOME */}
-        {screen==="dashboard" && (
-          <div className="content">
-            <div style={{display:"flex",gap:8,marginBottom:20}}>
-              {[{v:wSessions,l:"Sessies"},{v:wVolume>0?wVolume.toLocaleString()+"kg":"—",l:"Week vol."},{v:streak+"d",l:"Streak"}].map(s=>(
-                <div key={s.l} className="card" style={{flex:1,textAlign:"center",padding:"12px 8px"}}>
-                  <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:22,color:currentUser.color}}>{s.v}</div>
-                  <div style={{fontSize:10,color:"#444",fontFamily:"'Barlow Condensed',sans-serif",letterSpacing:1,textTransform:"uppercase"}}>{s.l}</div>
-                </div>
-              ))}
-            </div>
-            {new Date().getDay()===1 && !userWeights[today()] && (
-              <div onClick={()=>setScreen("weight")} style={{background:"#0f1a0f",border:"1px solid #1a3a1a",borderRadius:12,padding:"14px 16px",marginBottom:16,cursor:"pointer",display:"flex",alignItems:"center",gap:12}}>
-                <div style={{fontSize:22}}>⚖️</div>
-                <div style={{flex:1}}>
-                  <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:14,textTransform:"uppercase",letterSpacing:.5,color:"#06D6A0"}}>Maandag — Weeg jezelf!</div>
-                  <div style={{fontSize:12,color:"#3a6a3a",marginTop:2}}>Tik hier om je gewicht in te voeren</div>
-                </div>
-                <div style={{color:"#2a5a2a",fontSize:18}}>›</div>
-              </div>
-            )}
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-              <div>
-                <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:22,textTransform:"uppercase",letterSpacing:1}}>Welke workout vandaag?</div>
-                <div style={{fontSize:12,color:"#444",marginTop:2}}>{new Date().toLocaleDateString("nl-NL",{weekday:"long",day:"numeric",month:"long"})}</div>
-              </div>
-              <button className="switch-btn" onClick={()=>setScreen("split-editor")}>✏️ Bewerk</button>
-            </div>
-            {userSplit.map(s=>{
-              const logs = Object.keys(userLogs).filter(k=>k.startsWith(s.name+"|")).sort((a,b)=>b.localeCompare(a));
-              const lastDate = logs[0]?.split("|")[1];
-              const days = lastDate ? Math.round((new Date(today())-new Date(lastDate))/86400000) : null;
-              const label = days===null?"Nog niet gedaan":days===0?"Vandaag gedaan":days===1?"Gisteren":`${days} dagen geleden`;
-              return (
-                <div key={s.id} className="session-card" onClick={()=>startSession(s)}>
-                  <div className="sc-bar" style={{background:s.color}}/>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
-                    <div className="sc-name" style={{color:s.color}}>{s.name}</div>
-                    <div style={{fontSize:11,color:days===0?"#555":days!==null&&days<=3?"#FF6B35":"#333",fontFamily:"'Barlow Condensed',sans-serif"}}>{label}</div>
-                  </div>
-                  <div className="sc-focus">{s.focus}</div>
-                  <div className="ex-chips">{s.exercises.filter(e=>e.trim()).map(e=><span className="ex-chip" key={e}>{e}</span>)}</div>
-                </div>
-              );
-            })}
           </div>
         )}
-
-        {/* HISTORY */}
-        {screen==="history" && (
-          <div className="content">
-            {!allHistory.length
-              ? <div className="empty"><div className="empty-icon">📋</div><div className="empty-txt">Nog geen sessies</div></div>
-              : <>
-                  <div className="sec">{allHistory.length} sessies gelogd</div>
-                  {allHistory.map(k=>{
-                    const [name,date]=k.split("|");
-                    const s=userSplit.find(s=>s.name===name);
-                    const c=s?.color||"#555";
-                    const total=Object.values(userLogs[k]).reduce((n,sets)=>n+sets.length,0);
-                    return (
-                      <div className="hist-item" key={k} style={{borderLeft:`3px solid ${c}`}}>
-                        <div>
-                          <div className="hi-name" style={{color:c}}>{name}</div>
-                          <div className="hi-date">{new Date(date).toLocaleDateString("nl-NL",{weekday:"long",day:"numeric",month:"long"})}</div>
-                        </div>
-                        <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,color:"#444"}}>{total} sets</div>
-                      </div>
-                    );
-                  })}
-                </>
-            }
+        {new Date().getDay()===1 && !userWeights[today()] && (
+          <div onClick={()=>setScreen("weight")} style={{background:"#0f1a0f",border:"1px solid #1a3a1a",borderRadius:12,padding:"14px 16px",marginBottom:16,cursor:"pointer",display:"flex",alignItems:"center",gap:12}}>
+            <div style={{fontSize:22}}>⚖️</div>
+            <div style={{flex:1}}>
+              <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:14,textTransform:"uppercase",letterSpacing:.5,color:"#06D6A0"}}>Maandag — Weeg jezelf!</div>
+              <div style={{fontSize:12,color:"#3a6a3a",marginTop:2}}>Tik hier om je gewicht in te voeren</div>
+            </div>
+            <div style={{color:"#2a5a2a",fontSize:18}}>›</div>
           </div>
         )}
-
-        {/* PROGRESS */}
-        {screen==="progress" && <ProgressView userSplit={userSplit} userLogs={userLogs}/>}
-
-        {/* WEIGHT */}
-        {screen==="weight" && <WeightView weights={userWeights} onAdd={saveWeight} color={currentUser.color}/>}
-
-        {/* BATTLE */}
-        {screen==="battle" && <BattleView allUsers={allUsers}/>}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <div>
+            <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:22,textTransform:"uppercase",letterSpacing:1}}>Welke workout vandaag?</div>
+            <div style={{fontSize:12,color:"#444",marginTop:2}}>{new Date().toLocaleDateString("nl-NL",{weekday:"long",day:"numeric",month:"long"})}</div>
+          </div>
+          <button className="switch-btn" onClick={()=>setScreen("split-editor")}>✏️ Bewerk</button>
+        </div>
+        {userSplit.map(s=>{
+          const logs = Object.keys(userLogs).filter(k=>k.startsWith(s.name+"|")).sort((a,b)=>b.localeCompare(a));
+          const lastDate = logs[0]?.split("|")[1];
+          const days = lastDate ? Math.round((new Date(today())-new Date(lastDate))/86400000) : null;
+          const label = days===null?"Nog niet gedaan":days===0?"Vandaag gedaan":days===1?"Gisteren":`${days} dagen geleden`;
+          return (
+            <div key={s.id} className="session-card" onClick={()=>startSession(s)}>
+              <div className="sc-bar" style={{background:s.color}}/>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+                <div className="sc-name" style={{color:s.color}}>{s.name}</div>
+                <div style={{fontSize:11,color:days===0?"#555":days!==null&&days<=3?"#FF6B35":"#333",fontFamily:"'Barlow Condensed',sans-serif"}}>{label}</div>
+              </div>
+              <div className="sc-focus">{s.focus}</div>
+              <div className="ex-chips">{s.exercises.filter(e=>e.trim()).map(e=><span className="ex-chip" key={e}>{e}</span>)}</div>
+            </div>
+          );
+        })}
       </div>
-    </>
-  );
+    )}
+
+    {/* HISTORY */}
+    {screen==="history" && (
+      <div className="content">
+        {!allHistory.length
+          ? <div className="empty"><div className="empty-icon">📋</div><div className="empty-txt">Nog geen sessies</div></div>
+          : <>
+              <div className="sec">{allHistory.length} sessies gelogd</div>
+              {allHistory.map(k=>{
+                const [name,date]=k.split("|");
+                const s=userSplit.find(s=>s.name===name);
+                const c=s?.color||"#555";
+                const total=Object.values(userLogs[k]).reduce((n,sets)=>n+sets.length,0);
+                return (
+                  <div className="hist-item" key={k} style={{borderLeft:`3px solid ${c}`}}>
+                    <div>
+                      <div className="hi-name" style={{color:c}}>{name}</div>
+                      <div className="hi-date">{new Date(date).toLocaleDateString("nl-NL",{weekday:"long",day:"numeric",month:"long"})}</div>
+                    </div>
+                    <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,color:"#444"}}>{total} sets</div>
+                  </div>
+                );
+              })}
+            </>
+        }
+      </div>
+    )}
+
+    {/* PROGRESS */}
+    {screen==="progress" && <ProgressView userSplit={userSplit} userLogs={userLogs}/>}
+
+    {/* WEIGHT */}
+    {screen==="weight" && <WeightView weights={userWeights} onAdd={saveWeight} color={currentUser.color}/>}
+
+    {/* BATTLE */}
+    {screen==="battle" && <BattleView allUsers={allUsers}/>}
+  </div>
+</>
+```
+
+);
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+ReactDOM.createRoot(document.getElementById(‘root’)).render(<App/>);
 </script>
 
 <script>
@@ -1080,5 +1315,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
     });
   }
 </script>
+
 </body>
 </html>
