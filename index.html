@@ -899,7 +899,8 @@ function BattleView({ allUsers }) {
 function PinScreen({ user, onSuccess, onBack }) {
   const [digits, setDigits] = useState(["","","",""]);
   const [error, setError] = useState(false);
-  const inputRefs = [useRef(),useRef(),useRef(),useRef()];
+  const ref0 = useRef(), ref1 = useRef(), ref2 = useRef(), ref3 = useRef();
+  const inputRefs = [ref0, ref1, ref2, ref3];
 
   function handleDigit(i, val) {
     const v = val.replace(/\D/g,"").slice(-1);
