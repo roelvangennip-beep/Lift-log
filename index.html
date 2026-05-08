@@ -466,7 +466,7 @@ REGELS:
 5. Compound oefeningen EERST in de sessie, isolatie LAATST (energie sparen voor zware lifts)
 6. Bij prioriteit spiergroep: geef die spier 1-2 extra oefeningen per week
 
-GEEF TERUG ALS JSON (zonder markdown, alleen pure JSON):
+GEEF TERUG ALS PURE JSON (geen markdown blokken, geen extra tekst):
 {
   "explanation": "Korte uitleg waarom deze split bij hen past (2-3 zinnen)",
   "sessions": [
@@ -475,7 +475,7 @@ GEEF TERUG ALS JSON (zonder markdown, alleen pure JSON):
   ]
 }
 
-BELANGRIJK: Geef ALLEEN de JSON terug, geen extra tekst, geen markdown, geen \`\`\`json blokken.`;
+BELANGRIJK: Geef ALLEEN de pure JSON terug, geen extra tekst en geen markdown.`;
 
     try{
       const r=await fetch("https://api.anthropic.com/v1/messages",{
@@ -485,7 +485,7 @@ BELANGRIJK: Geef ALLEEN de JSON terug, geen extra tekst, geen markdown, geen \`\
       });
       const d=await r.json();
       const txt=d.content&&d.content[0]&&d.content[0].text||"";
-      const cleaned=txt.replace(/\`\`\`json/g,"").replace(/\`\`\`/g,"").trim();
+      const cleaned=txt.replace(/```json/g,"").replace(/```/g,"").trim();
       const parsed=JSON.parse(cleaned);
       const COLORS=["#FF6B35","#FFD60A","#4CC9F0","#7B2FBE","#06D6A0","#EF476F"];
       const newSplit=parsed.sessions.map((s,i)=>({
