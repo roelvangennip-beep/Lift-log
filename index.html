@@ -165,7 +165,7 @@ function EL({ex,color,sets,inputVal,prevSets,onIC,onAdd,onRm,isLogged}) {
     <div className="le">
       <div className="lh">
         <div>
-          <div className="ln">{ex}{isLogged&&<span style={{fontSize:9,color:"#06D6A0",marginLeft:8,letterSpacing:1,fontWeight:700}}>✓ GELOGD</span>}</div>
+          <div className="ln">{ex} <a href={`https://www.youtube.com/results?search_query=${encodeURIComponent(ex+" form tutorial")}`} target="_blank" rel="noopener" style={{textDecoration:"none",color:"#FF6B35",fontSize:11,marginLeft:6,opacity:0.7}} onClick={e=>e.stopPropagation()}>ⓘ</a>{isLogged&&<span style={{fontSize:9,color:"#06D6A0",marginLeft:8,letterSpacing:1,fontWeight:700}}>✓ GELOGD</span>}</div>
           {prevSets&&prevSets.length>0&&<div style={{fontSize:10,color:"#444",marginTop:2,fontFamily:"'Barlow Condensed',sans-serif"}}>Vorig: {prevSets.map(s=>`${s.weight||"—"}kg×${s.reps}`).join(" · ")}</div>}
         </div>
         <div className="sc">{sets.length} set{sets.length!==1?"s":""}</div>
@@ -195,7 +195,9 @@ function EL({ex,color,sets,inputVal,prevSets,onIC,onAdd,onRm,isLogged}) {
 }
 
 // ── Split Editor ──
-function SE({split,onChange}) {
+function SE({split,onChange,onAIMake,onCopyFriend,allUsers,currentUser}){
+  const [showCopy,setShowCopy]=useState(false);
+  const [copyLoading,setCopyLoading]=useState(false);
   function upd(id,f,v){onChange(split.map(s=>s.id===id?{...s,[f]:v}:s));}
   function updEx(id,i,v){const s=split.find(s=>s.id===id);upd(id,"exercises",s.exercises.map((e,j)=>j===i?v:e));}
   function addEx(id){const s=split.find(s=>s.id===id);upd(id,"exercises",[...s.exercises,""]);}
@@ -203,6 +205,23 @@ function SE({split,onChange}) {
   function addS(){const used=split.map(s=>s.color),color=COLORS.find(c=>!used.includes(c))||COLORS[0];onChange([...split,{id:"s"+Date.now(),name:"Nieuw",color,focus:"",exercises:[""]}]);}
   return (
     <div className="pg">
+      <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+        <button onClick={onAIMake} style={{flex:1,minWidth:140,background:"linear-gradient(135deg,#FF6B35,#EF476F)",border:"none",borderRadius:10,padding:"12px 14px",color:"white",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:13,letterSpacing:1,textTransform:"uppercase",cursor:"pointer"}}>🤖 AI Split Maker</button>
+        {allUsers&&allUsers.filter(u=>u.name!==currentUser.name).length>0&&<button onClick={()=>setShowCopy(!showCopy)} style={{flex:1,minWidth:140,background:"#1a1a1a",border:"1px solid #252525",borderRadius:10,padding:"12px 14px",color:"#ddd",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:13,letterSpacing:1,textTransform:"uppercase",cursor:"pointer"}}>📋 Kopieer van vriend</button>}
+      </div>
+      {showCopy&&(
+        <div className="card" style={{marginBottom:16}}>
+          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:13,textTransform:"uppercase",letterSpacing:1,marginBottom:10,color:"#FF6B35"}}>Selecteer vriend</div>
+          {copyLoading?<div style={{fontSize:12,color:"#555"}}>Laden...</div>:allUsers.filter(u=>u.name!==currentUser.name).map(u=>(
+            <button key={u.name} onClick={async()=>{setCopyLoading(true);await onCopyFriend(u.name);setShowCopy(false);setCopyLoading(false);}}
+              style={{display:"flex",alignItems:"center",gap:10,width:"100%",background:"#0a0a0a",border:`1px solid ${u.color}33`,borderRadius:8,padding:10,marginBottom:6,cursor:"pointer",textAlign:"left"}}>
+              <Av user={u} size={28}/>
+              <div style={{flex:1,fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:14,color:u.color,textTransform:"uppercase",letterSpacing:.5}}>{u.name}</div>
+              <div style={{color:"#444",fontSize:14}}>›</div>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="sec" style={{marginBottom:16}}>Jouw Split</div>
       {split.map(s=>(
         <div className="ss" key={s.id} style={{borderLeft:`3px solid ${s.color}`}}>
@@ -219,7 +238,7 @@ function SE({split,onChange}) {
           <div style={{display:"flex",flexDirection:"column",gap:5}}>
             {s.exercises.map((ex,i)=>(
               <div key={i} style={{display:"flex",gap:6,alignItems:"center"}}>
-                <input className="ei" value={ex} onChange={e=>updEx(s.id,i,e.target.value)} placeholder={`Oefening ${i+1}`}/>
+                <input className="ei" value={ex} onChange={e=>updEx(s.id,i,e.target.value)} placeholder={`Oefening ${i+1}`}/>{ex.trim()&&<a href={`https://www.youtube.com/results?search_query=${encodeURIComponent(ex+" form tutorial")}`} target="_blank" rel="noopener" style={{color:"#FF6B35",fontSize:14,opacity:0.7,textDecoration:"none"}}>ⓘ</a>}
                 <button onClick={()=>rmEx(s.id,i)} style={{background:"none",border:"none",color:"#2a2a2a",cursor:"pointer",fontSize:16}}>×</button>
               </div>
             ))}
@@ -228,6 +247,300 @@ function SE({split,onChange}) {
         </div>
       ))}
       <button onClick={addS} style={{width:"100%",background:"none",border:"2px dashed #222",borderRadius:12,padding:16,color:"#444",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:14,letterSpacing:2,textTransform:"uppercase",cursor:"pointer",marginBottom:14}}>+ Sessie toevoegen</button>
+    </div>
+  );
+}
+
+// ── AI Split Maker ──
+function ASM({currentSplit,onGenerated,onBack}) {
+  const [step,setStep] = useState(0);
+  const [answers,setAnswers] = useState({experience:"",days:"",splitType:"",volume:"",priority:"",limitations:""});
+  const [loading,setLoading] = useState(false);
+  const [error,setError] = useState(null);
+  const [generated,setGenerated] = useState(null);
+
+  const Q = [
+    {k:"experience",label:"Hoeveel ervaring heb je?",opts:[["beginner","Beginner — minder dan 1 jaar"],["intermediate","Gemiddeld — 1 tot 3 jaar"],["advanced","Gevorderd — 3+ jaar"]]},
+    {k:"days",label:"Hoeveel dagen per week wil je trainen?",opts:[["3","3 dagen"],["4","4 dagen"],["5","5 dagen"],["6","6 dagen"]]},
+    {k:"splitType",label:"Welke split wil je?",opts:[["upperlower","Upper / Lower"],["ppl","Push / Pull / Legs"],["fullbody","Full Body"],["aiChoice","Laat AI kiezen wat past"]]},
+    {k:"volume",label:"Hoeveel volume per sessie?",opts:[["normal","Normaal — 4-5 oefeningen per sessie"],["high","Hoog — 6-7 oefeningen per sessie"]]},
+    {k:"priority",label:"Welke spiergroep extra prioriteit?",opts:[["none","Gelijk verdeeld"],["chest","Borst"],["back","Rug"],["legs","Benen"],["arms","Armen"],["shoulders","Schouders"]]},
+  ];
+
+  async function generate() {
+    setLoading(true); setError(null);
+    
+    const exerciseLib = `
+GOEDGEKEURDE OEFENINGEN (kies alleen hieruit):
+BORST: Bench Press, Incline Bench Press, Incline Smith Machine, Dumbbell Bench Press, Incline Dumbbell Press, Decline Bench Press, Chest Press Machine, Pec Deck, Cable Fly, Dips
+RUG (lats): Lat Pulldown, Wide Grip Pulldown, Close Grip Pulldown, Pull-ups, Single Arm Pulldown 45°, Straight Arm Pulldown
+RUG (boven/rhomboids): Machine Row, Seated Cable Row, Barbell Row, Dumbbell Row, T-Bar Row, Chest Supported Row
+RUG (traps/rear delts): Face Pulls, Rear Delt Fly, Reverse Pec Deck, Shrugs
+RUG (lower): Deadlift, Romanian Deadlift, Back Extension
+SCHOUDERS: Overhead Press, Dumbbell Shoulder Press, Lateral Raises, Cable Lateral Raises, Front Raises, Arnold Press
+ARMEN (biceps): Barbell Curl, Dumbbell Curl, Hammer Curl, Preacher Curl, Bicep Curl Machine, Cable Curl
+ARMEN (triceps): Tricep Pushdown, JM Press, Skull Crushers, Overhead Tricep Extension, Close Grip Bench, Tricep Dip
+QUADS: Squat, Front Squat, Hack Squat, Leg Press, Leg Extension, Bulgarian Split Squat, Walking Lunges
+HAMSTRINGS: Romanian Deadlift, Stiff Leg Deadlift, Leg Curl, Seated Leg Curl, Good Morning
+GLUTES: Hip Thrust, Glute Bridge, Cable Kickback, Bulgarian Split Squat
+KUITEN: Calf Raises, Seated Calf Raise, Leg Press Calf Raise`;
+
+    const splitRules = `
+SPLIT TYPE REGELS:
+- Upper/Lower: 2x per week per spier. Pas op overlap! Bench werkt al triceps, dus geen aparte tricep dag erna. Plan goed.
+- Push/Pull/Legs (PPL): Push = borst+schouders+triceps samen (hoog volume OK). Pull = rug+biceps+rear delts samen. Legs = quads+hams+glutes+kuiten. Train elke spier 2x per week (PPL-PPL-rust).
+- Full Body: 3x per week, alles per sessie. Compound focus. 1-2 oefeningen per spiergroep max om vermoeidheid te beperken.
+
+SPIER COVERAGE CHECK (verplicht):
+- Rug = lats (pulldowns) + boven rug (rows) + rear delts (face pulls) + lower back (RDLs/deadlifts)
+- Borst = compound (bench) + incline variant
+- Schouders = side delts (lateral raises) altijd. Front delts krijgen al veel van bench/press.
+- Benen = quads + hams + glutes + kuiten allemaal raken
+- Armen = biceps + triceps direct werk
+
+ALGEMEEN:
+- Compound oefeningen eerst, isolatie later
+- Niet dubbel volume creëren (bv. bench + OHP + dips op upper dag = triceps overload)
+- Rust dagen tussen zelfde spiergroep: minimaal 48u`;
+
+    const prompt = `Je bent een ervaren krachttrainer. Maak een gepersonaliseerde split voor iemand op basis van deze antwoorden.
+
+ANTWOORDEN:
+- Ervaring: ${answers.experience}
+- Dagen per week: ${answers.days}
+- Split type: ${answers.splitType === "aiChoice" ? "Kies zelf wat het beste past" : answers.splitType}
+- Volume per sessie: ${answers.volume}
+- Prioriteit spiergroep: ${answers.priority}
+- Beperkingen: ${answers.limitations || "geen"}
+
+${exerciseLib}
+
+${splitRules}
+
+Maak nu een split die wetenschappelijk onderbouwd is voor hypertrofie. Geef terug als pure JSON (geen extra tekst, geen markdown):
+
+{
+  "reasoning": "Korte uitleg (3-4 zinnen) waarom deze split past",
+  "sessions": [
+    {"name": "Upper A", "color": "#FF6B35", "focus": "Borst & Rug", "exercises": ["Bench Press", "Lat Pulldown", "..."]}
+  ]
+}
+
+Kleuren te kiezen uit: #FF6B35, #FFD60A, #4CC9F0, #7B2FBE, #06D6A0, #EF476F.
+Volg precies het aantal dagen. Houd de oefeningen-aantal in lijn met "${answers.volume}". Check spier coverage en respecteer overlap regels.`;
+
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          model:"claude-sonnet-4-20250514",
+          max_tokens:2000,
+          messages:[{role:"user",content:prompt}]
+        })
+      });
+      const data = await res.json();
+      const text = data.content?.[0]?.text || "";
+      const cleaned = text.replace(/```json/g,"").replace(/```/g,"").trim();
+      const parsed = JSON.parse(cleaned);
+      
+      // Add IDs to sessions
+      const sessions = parsed.sessions.map((s,i)=>({...s,id:"ai"+Date.now()+i}));
+      setGenerated({reasoning:parsed.reasoning,sessions});
+    } catch(e) {
+      setError("Kon split niet genereren. Probeer opnieuw.");
+    }
+    setLoading(false);
+  }
+
+  function applyGenerated() {
+    onGenerated(generated.sessions);
+  }
+
+  if(generated) return (
+    <div className="pg">
+      <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:22,textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>🤖 Jouw AI Split</div>
+      <div className="card" style={{marginBottom:16,borderTop:"2px solid #FF6B35"}}>
+        <div style={{fontSize:11,color:"#FF6B35",fontFamily:"'Barlow Condensed',sans-serif",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Onderbouwing</div>
+        <div style={{fontSize:13,color:"#ddd",lineHeight:1.6}}>{generated.reasoning}</div>
+      </div>
+      {generated.sessions.map(s=>(
+        <div className="ss" key={s.id} style={{borderLeft:`3px solid ${s.color}`}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+            <div style={{width:14,height:14,borderRadius:"50%",background:s.color,flexShrink:0}}/>
+            <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:18,textTransform:"uppercase",color:s.color,flex:1}}>{s.name}</div>
+          </div>
+          <div style={{fontSize:11,color:"#666",marginBottom:8,fontStyle:"italic"}}>{s.focus}</div>
+          {s.exercises.map((ex,i)=>(
+            <div key={i} style={{fontSize:13,color:"#ccc",padding:"4px 0",display:"flex",alignItems:"center",gap:8}}>
+              <span style={{color:"#444",fontSize:10}}>{i+1}.</span>
+              <span style={{flex:1}}>{ex}</span>
+              <a href={`https://www.youtube.com/results?search_query=${encodeURIComponent(ex+" form tutorial")}`} target="_blank" rel="noopener" style={{color:"#FF6B35",fontSize:13,opacity:0.7,textDecoration:"none"}}>ⓘ</a>
+            </div>
+          ))}
+        </div>
+      ))}
+      <button className="sb" onClick={applyGenerated} style={{marginTop:8,marginBottom:8}}>✓ Gebruik deze split</button>
+      <button className="btn-ghost" onClick={()=>{setGenerated(null);setStep(0);}}>↩ Opnieuw genereren</button>
+    </div>
+  );
+
+  if(step >= Q.length) return (
+    <div className="pg" style={{textAlign:"center",paddingTop:40}}>
+      <div style={{fontSize:48,marginBottom:16}}>🤖</div>
+      <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:22,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Klaar?</div>
+      <div style={{fontSize:13,color:"#555",marginBottom:24}}>Optioneel: blessures of beperkingen</div>
+      <textarea value={answers.limitations} onChange={e=>setAnswers({...answers,limitations:e.target.value})}
+        placeholder="Bijv. lage rug klachten, geen squat rack..." 
+        style={{background:"#1a1a1a",border:"1px solid #252525",borderRadius:8,padding:12,color:"#f0f0f0",fontFamily:"inherit",fontSize:13,width:"100%",minHeight:80,resize:"vertical",marginBottom:16,boxSizing:"border-box"}}/>
+      {error&&<div style={{color:"#ff4444",fontSize:13,marginBottom:12}}>{error}</div>}
+      <button className="sb" onClick={generate} disabled={loading}>
+        {loading?"⏳ AI denkt na...":"🤖 Genereer mijn split"}
+      </button>
+      <button className="btn-ghost" onClick={()=>setStep(step-1)}>↩ Terug</button>
+    </div>
+  );
+
+  const q = Q[step];
+  return (
+    <div className="pg">
+      <div style={{fontSize:11,color:"#444",fontFamily:"'Barlow Condensed',sans-serif",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Vraag {step+1} van {Q.length}</div>
+      <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:22,textTransform:"uppercase",letterSpacing:1,marginBottom:20}}>{q.label}</div>
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {q.opts.map(([v,l])=>(
+          <button key={v} onClick={()=>{setAnswers({...answers,[q.k]:v});setStep(step+1);}}
+            style={{background:answers[q.k]===v?"#FF6B3522":"#1a1a1a",border:`1px solid ${answers[q.k]===v?"#FF6B35":"#252525"}`,borderRadius:10,padding:"14px 16px",color:answers[q.k]===v?"#FF6B35":"#ddd",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:14,letterSpacing:1,textTransform:"uppercase",cursor:"pointer",textAlign:"left"}}>
+            {l}
+          </button>
+        ))}
+      </div>
+      {step>0&&<button className="btn-ghost" style={{marginTop:16}} onClick={()=>setStep(step-1)}>↩ Vorige</button>}
+    </div>
+  );
+}
+
+
+// ── AI Split Maker ──
+function ASM({onGenerated,onBack}){
+  const [step,setStep]=useState(0);
+  const [ans,setAns]=useState({exp:"",days:"",type:"",vol:"",prio:"",lim:""});
+  const [loading,setLoading]=useState(false);
+  const [err,setErr]=useState(null);
+
+  const Q=[
+    {k:"exp",l:"Ervaring",opts:[["beginner","Beginner (< 1 jaar)"],["intermediate","Gemiddeld (1-3 jaar)"],["advanced","Gevorderd (3+ jaar)"]]},
+    {k:"days",l:"Dagen per week",opts:[["3","3 dagen"],["4","4 dagen"],["5","5 dagen"],["6","6 dagen"]]},
+    {k:"type",l:"Type split",opts:[["upperlower","Upper / Lower"],["ppl","Push / Pull / Legs"],["fullbody","Full Body"]]},
+    {k:"vol",l:"Volume",opts:[["normal","Normaal volume"],["high","Hoog volume (gevorderd)"]]},
+    {k:"prio",l:"Prioriteit spiergroep",opts:[["none","Geen, alles gelijk"],["chest","Borst"],["back","Rug"],["legs","Benen"],["arms","Armen"],["shoulders","Schouders"]]}
+  ];
+
+  async function generate(){
+    setLoading(true);setErr(null);
+    const prompt=`Je bent een expert personal trainer. Maak een complete trainingssplit op basis van deze input:
+
+ERVARING: ${ans.exp}
+DAGEN PER WEEK: ${ans.days}
+TYPE SPLIT: ${ans.type}
+VOLUME: ${ans.vol}
+PRIORITEIT SPIERGROEP: ${ans.prio}
+BLESSURES/BEPERKINGEN: ${ans.lim||"geen"}
+
+REGELS:
+1. Gebruik ALLEEN gym oefeningen (geen thuis/bodyweight tenzij dat de beste keuze is)
+2. Dek ALLE specifieke spiergroepen:
+   - Rug: lats (pulldowns/pull-ups) + boven-rug/rhomboids (rows) + traps (shrugs of face pulls) + lower back (deadlift/RDL)
+   - Borst: upper (incline) + mid (flat) + lower (dips of decline)
+   - Schouders: front + side (lateral raises) + REAR (rear delt fly of face pulls — VAAK VERGETEN)
+   - Benen: quads (squat/leg press) + hamstrings (RDL/leg curl) + glutes (hip thrust/lunges) + kuiten
+   - Armen: biceps + triceps (apart trainen tenzij PPL)
+3. Spier-overlap respecteren:
+   - Bench traint borst + front delts + triceps → bij Upper/Lower NIET ook nog isolatie front delts
+   - OHP traint schouders + triceps → niet zelfde dag als bench bij Upper/Lower
+   - Deadlift traint hele achterketen → reken dat mee
+   - Rows trainen rug + biceps → bij Upper/Lower niet teveel curls toevoegen
+4. Per split type ander volume:
+   - Upper/Lower: matig volume per sessie (4-6 oef per dag), elke spier 2x/week
+   - PPL: hoog volume per sessie OK (5-7 oef per dag), elke spier 2x/week bij 6 dagen
+   - Full Body: laag volume per sessie (3-5 oef per dag), elke spier 3x/week, focus compounds
+5. Compound oefeningen EERST in de sessie, isolatie LAATST (energie sparen voor zware lifts)
+6. Bij prioriteit spiergroep: geef die spier 1-2 extra oefeningen per week
+
+GEEF TERUG ALS JSON (zonder markdown, alleen pure JSON):
+{
+  "explanation": "Korte uitleg waarom deze split bij hen past (2-3 zinnen)",
+  "sessions": [
+    {"name": "Upper A", "focus": "Borst & Triceps focus", "exercises": ["Bench Press", "Incline Dumbbell Press", ...]},
+    ...
+  ]
+}
+
+BELANGRIJK: Geef ALLEEN de JSON terug, geen extra tekst, geen markdown, geen \`\`\`json blokken.`;
+
+    try{
+      const r=await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:2000,messages:[{role:"user",content:prompt}]})
+      });
+      const d=await r.json();
+      const txt=d.content&&d.content[0]&&d.content[0].text||"";
+      const cleaned=txt.replace(/\`\`\`json/g,"").replace(/\`\`\`/g,"").trim();
+      const parsed=JSON.parse(cleaned);
+      const COLORS=["#FF6B35","#FFD60A","#4CC9F0","#7B2FBE","#06D6A0","#EF476F"];
+      const newSplit=parsed.sessions.map((s,i)=>({
+        id:"ai"+Date.now()+i,
+        name:s.name,
+        color:COLORS[i%COLORS.length],
+        focus:s.focus||"",
+        exercises:s.exercises
+      }));
+      onGenerated(newSplit,parsed.explanation);
+    }catch(e){
+      setErr("Fout bij genereren. Probeer opnieuw.");
+    }
+    setLoading(false);
+  }
+
+  if(loading)return(
+    <div className="pg" style={{textAlign:"center",paddingTop:60}}>
+      <div style={{fontSize:36,marginBottom:16}}>🤖</div>
+      <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:20,letterSpacing:1,textTransform:"uppercase",marginBottom:8}}>AI denkt na...</div>
+      <div style={{fontSize:13,color:"#555"}}>Een split maken op maat duurt ~10 seconden</div>
+    </div>
+  );
+
+  if(step<Q.length){
+    const q=Q[step];
+    return(
+      <div className="pg">
+        <button onClick={onBack} style={{background:"none",border:"none",color:"#555",fontFamily:"'Barlow Condensed',sans-serif",fontSize:13,letterSpacing:1,textTransform:"uppercase",cursor:"pointer",marginBottom:20,padding:0}}>← Terug</button>
+        <div style={{fontSize:11,color:"#444",fontFamily:"'Barlow Condensed',sans-serif",letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Vraag {step+1} van {Q.length+1}</div>
+        <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:24,textTransform:"uppercase",letterSpacing:1,marginBottom:20}}>{q.l}</div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {q.opts.map(([v,l])=>(
+            <button key={v} onClick={()=>{setAns({...ans,[q.k]:v});setStep(step+1);}}
+              style={{background:ans[q.k]===v?"#FF6B3522":"#1a1a1a",border:`1px solid ${ans[q.k]===v?"#FF6B35":"#252525"}`,borderRadius:10,padding:"14px 16px",color:ans[q.k]===v?"#FF6B35":"#ddd",textAlign:"left",cursor:"pointer",fontSize:14,fontFamily:"'Barlow',sans-serif"}}>
+              {l}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Last step: limitations
+  return(
+    <div className="pg">
+      <button onClick={()=>setStep(step-1)} style={{background:"none",border:"none",color:"#555",fontFamily:"'Barlow Condensed',sans-serif",fontSize:13,letterSpacing:1,textTransform:"uppercase",cursor:"pointer",marginBottom:20,padding:0}}>← Terug</button>
+      <div style={{fontSize:11,color:"#444",fontFamily:"'Barlow Condensed',sans-serif",letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Vraag {Q.length+1} van {Q.length+1}</div>
+      <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:24,textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Blessures of beperkingen?</div>
+      <div style={{fontSize:12,color:"#555",marginBottom:14}}>Optioneel — bijv. "rug blessure, geen deadlifts" of "knie pijn"</div>
+      <textarea value={ans.lim} onChange={e=>setAns({...ans,lim:e.target.value})}
+        placeholder="Laat leeg als je niks hebt..."
+        style={{background:"#1a1a1a",border:"1px solid #252525",borderRadius:8,padding:12,color:"#f0f0f0",fontFamily:"'Barlow',sans-serif",fontSize:14,width:"100%",outline:"none",minHeight:80,resize:"vertical",marginBottom:16,boxSizing:"border-box"}}/>
+      {err&&<div style={{color:"#ff4444",fontSize:13,marginBottom:12}}>{err}</div>}
+      <button onClick={generate} style={{width:"100%",background:"#FF6B35",border:"none",borderRadius:10,padding:14,color:"white",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:15,letterSpacing:2,textTransform:"uppercase",cursor:"pointer"}}>🤖 Genereer mijn split</button>
     </div>
   );
 }
@@ -618,6 +931,7 @@ function App() {
   const [allUsers,setAllUsers]=useState([]);
   const [user,setUser]=useState(null);
   const [split,setSplit]=useState([]);
+  const [aiExplanation,setAiExplanation]=useState(null);
   const [logs,setLogs]=useState({});
   const [weights,setWeights]=useState({});
   const [ann,setAnn]=useState(null);
@@ -847,7 +1161,23 @@ function App() {
         <div className="logo">Lift<span>Log</span></div>
         <button onClick={()=>saveSplit(split)} style={{background:"#FF6B35",border:"none",borderRadius:8,color:"white",padding:"8px 14px",cursor:"pointer",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:13,letterSpacing:1,textTransform:"uppercase"}}>Opslaan</button>
       </div>
+      <div style={{padding:"12px 20px 0"}}>
+        <button onClick={()=>setScreen("ai-split")} style={{width:"100%",background:"linear-gradient(135deg,#FF6B35,#FFD60A)",border:"none",borderRadius:10,padding:"12px",color:"#0a0a0a",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:13,letterSpacing:2,textTransform:"uppercase",cursor:"pointer",marginBottom:12}}>
+          🤖 Laat AI een split maken
+        </button>
+      </div>
       <SE split={split} onChange={setSplit}/>
+    </div></>
+  );
+
+  if(screen==="ai-split") return (
+    <><style>{CSS}</style>
+    <div className="app">
+      <div className="hdr">
+        <button className="hdr-back" onClick={()=>setScreen("split-editor")}>←</button>
+        <div className="logo">Lift<span>Log</span></div>
+      </div>
+      <ASM currentSplit={split} onGenerated={(s)=>{setSplit(s);saveSplit(s);}} onBack={()=>setScreen("split-editor")}/>
     </div></>
   );
 
